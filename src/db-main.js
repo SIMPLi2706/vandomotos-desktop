@@ -183,6 +183,10 @@ function initDatabase() {
     { nome: 'caucao_penhora_detalhes', tipo: 'TEXT' },
     { nome: 'km_saida', tipo: 'INTEGER' },
     { nome: 'km_retorno', tipo: 'INTEGER' },
+    { nome: 'valor_integral', tipo: 'REAL' },
+    { nome: 'valor_semanal', tipo: 'REAL' },
+    { nome: 'ultimo_aditivo', tipo: 'TEXT' },
+    { nome: 'historico_aditivos', tipo: 'TEXT' },
   ];
 
   for (const campo of camposContratos) {

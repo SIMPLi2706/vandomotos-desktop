@@ -326,6 +326,36 @@ export function renderContratos(container) {
             </div>
         </div>
 
+        <!-- MODAL DE REIMPRESSÃO DE TERMOS ADITIVOS -->
+        <div id="modal-reimprimir-aditivo" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[80] hidden flex items-center justify-center p-4 transition-opacity opacity-0">
+            <div class="bg-white border border-gray-900 w-full max-w-xl shadow-2xl overflow-hidden transform scale-95 transition-transform" id="modal-reimprimir-aditivo-panel">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-sm font-black text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                            <i class="ph-bold ph-printer text-purple-600 text-lg"></i> Reimprimir Termo Aditivo
+                        </h2>
+                        <p class="text-[11px] text-gray-500 font-sans" id="reimp-subtitulo">Selecione qual termo aditivo deseja visualizar / imprimir</p>
+                    </div>
+                    <button id="btn-fechar-reimprimir" class="text-gray-400 hover:text-red-600 transition"><i class="ph ph-x text-xl"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="bg-purple-50 border border-purple-200 p-3 text-xs space-y-1">
+                        <div><strong class="text-purple-900">Cliente:</strong> <span id="reimp-info-cliente" class="text-gray-900 font-bold"></span></div>
+                        <div><strong class="text-purple-900">Veículo:</strong> <span id="reimp-info-veiculo" class="text-gray-900 font-bold"></span></div>
+                        <div><strong class="text-purple-900">Contrato:</strong> <span id="reimp-info-contrato" class="font-mono text-gray-900 font-bold"></span></div>
+                    </div>
+
+                    <div class="max-h-80 overflow-y-auto space-y-2 border border-gray-200 p-2 bg-gray-50/50" id="reimp-lista-aditivos">
+                        <!-- Itens injetados via JS -->
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                        <button type="button" id="btn-cancelar-reimprimir" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 font-bold text-xs uppercase hover:bg-gray-50 transition">Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- MODAL DE DEVOLUÇÃO (BAIXA DE CONTRATO) -->
         <div id="modal-devolucao" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[80] hidden flex items-center justify-center p-4 transition-opacity opacity-0">
             <div class="bg-white border border-gray-900 w-full max-w-lg shadow-2xl overflow-hidden transform scale-95 transition-transform" id="modal-devolucao-panel">
@@ -519,6 +549,91 @@ export function renderContratos(container) {
     const inputAdtNovoValor = document.getElementById('adt-novo-valor');
     const inputAdtKmAtual = document.getElementById('adt-km-atual');
     const inputAdtObs = document.getElementById('adt-obs');
+
+    // Modal Reimprimir Aditivo
+    const modalReimprimir = document.getElementById('modal-reimprimir-aditivo');
+    const modalReimprimirPanel = document.getElementById('modal-reimprimir-aditivo-panel');
+    const btnFecharReimprimir = document.getElementById('btn-fechar-reimprimir');
+    const btnCancelarReimprimir = document.getElementById('btn-cancelar-reimprimir');
+    const reimpInfoCliente = document.getElementById('reimp-info-cliente');
+    const reimpInfoVeiculo = document.getElementById('reimp-info-veiculo');
+    const reimpInfoContrato = document.getElementById('reimp-info-contrato');
+    const reimpListaAditivos = document.getElementById('reimp-lista-aditivos');
+
+    function getHistoricoAditivos(contrato) {
+        if (!contrato) return [];
+        if (Array.isArray(contrato.historico_aditivos)) {
+            return contrato.historico_aditivos;
+        }
+        if (typeof contrato.historico_aditivos === 'string' && contrato.historico_aditivos.trim()) {
+            try {
+                const parsed = JSON.parse(contrato.historico_aditivos);
+                if (Array.isArray(parsed)) return parsed;
+            } catch (e) {
+                console.warn('Erro ao parsear historico_aditivos:', e);
+            }
+        }
+        return [];
+    }
+
+    function getUltimoAditivo(contrato) {
+        if (!contrato) return null;
+        if (contrato.ultimo_aditivo && typeof contrato.ultimo_aditivo === 'object') {
+            return contrato.ultimo_aditivo;
+        }
+        if (typeof contrato.ultimo_aditivo === 'string' && contrato.ultimo_aditivo.trim()) {
+            try {
+                const parsed = JSON.parse(contrato.ultimo_aditivo);
+                if (parsed && typeof parsed === 'object') return parsed;
+            } catch (e) {
+                console.warn('Erro ao parsear ultimo_aditivo:', e);
+            }
+        }
+        const hist = getHistoricoAditivos(contrato);
+        if (hist.length > 0) {
+            return hist[hist.length - 1];
+        }
+        return null;
+    }
+
+    function obterOuSintetizarAditivos(c) {
+        let lista = getHistoricoAditivos(c);
+        if (lista && lista.length > 0) {
+            return lista;
+        }
+        const ult = getUltimoAditivo(c);
+        if (ult) {
+            return [ult];
+        }
+        const numAdt = Number(c.numero_aditivo) || 0;
+        const isFid = c.tipo_plano === 'fidelidade';
+        const isAqui = c.tipo_plano === 'aquisicao';
+        const semanasPagas = Number(c.semanas_pagas) || (isFid ? (numAdt > 0 ? numAdt + 1 : 1) : numAdt);
+
+        if (numAdt > 0 || (isFid && semanasPagas > 1) || (isAqui && semanasPagas > 0)) {
+            const totalAditivos = numAdt > 0 ? numAdt : (isFid ? (semanasPagas - 1) : semanasPagas);
+            const resultado = [];
+            for (let i = 1; i <= totalAditivos; i++) {
+                const semNum = isFid ? (i + 1) : i;
+                const valSem = isFid 
+                    ? (Number(c.valor_semanal) || (Number(c.valor) > 1000 ? Number(c.valor)/12 : Number(c.valor)) || 350)
+                    : (isAqui ? (Number(c.valor_semanal) || Number(c.valor_parcela) || 375) : Number(c.valor));
+                resultado.push({
+                    id: `legado-${c.id}-${i}`,
+                    numero_aditivo: i,
+                    semanas_pagas: semNum,
+                    data_inicio: c.data_inicio,
+                    data_fim: c.data_fim,
+                    valor: valSem,
+                    km_atual: c.km_retorno || c.km_saida || 0,
+                    observacoes: c.observacoes || '',
+                    criado_em: c.criado_em || new Date().toISOString()
+                });
+            }
+            return resultado;
+        }
+        return [];
+    }
 
     // Modal Devolução (Baixa)
     const modalDevolucao = document.getElementById('modal-devolucao');
@@ -833,6 +948,14 @@ export function renderContratos(container) {
                 const dtInicio = new Date(c.data_inicio).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
                 const dtFim = new Date(c.data_fim).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
                 const emitidoPor = c.usuario_nome || 'Sistema';
+                const temAditivo = Boolean(
+                    (c.numero_aditivo && Number(c.numero_aditivo) > 0) ||
+                    (c.tipo_plano === 'fidelidade' && Number(c.semanas_pagas) > 1) ||
+                    (c.tipo_plano === 'aquisicao' && Number(c.semanas_pagas) > 0) ||
+                    (Array.isArray(c.historico_aditivos) && c.historico_aditivos.length > 0) ||
+                    (typeof c.historico_aditivos === 'string' && c.historico_aditivos.length > 2 && c.historico_aditivos !== '[]') ||
+                    c.ultimo_aditivo
+                );
                 const tr = document.createElement('tr');
                 tr.className = `border-b border-gray-100 last:border-0 transition-colors ${c.status === 'encerrado' ? 'bg-gray-50/50 opacity-80' : 'hover:bg-gray-50'}`;
                 tr.innerHTML = `
@@ -880,6 +1003,11 @@ export function renderContratos(container) {
                                 `}
                             </div>
                             <div class="flex gap-1 w-full justify-end">
+                                ${temAditivo ? `
+                                <button class="btn-reimprimir-aditivo bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white border border-purple-200 hover:border-purple-600 px-2 py-1 text-[10px] uppercase tracking-wider font-black transition rounded-sm flex items-center gap-1 shadow-sm" data-id="${c.id}" title="Reimprimir Termo Aditivo / Comprovante">
+                                    <i class="ph-bold ph-printer text-sm"></i> Reimprimir Aditivo
+                                </button>
+                                ` : ''}
                                 ${c.status === 'ativo' ? `
                                 <button class="btn-encerrar bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-600 hover:text-white hover:border-orange-700 px-2 py-1 text-[10px] font-black uppercase tracking-wider transition rounded-sm flex items-center gap-1 shadow-sm" data-id="${c.id}">
                                     <i class="ph-bold ph-stop text-sm"></i> Baixa
@@ -1310,11 +1438,12 @@ export function renderContratos(container) {
     }
 
     // ========== GERAR ADITIVO ==========
-    function gerarPDFAditivo(contratoId, dataInicioRenovacao, novaDataFim, novoValor, obs, kmRenovacao) {
+    function gerarPDFAditivo(contratoId, dataInicioRenovacao, novaDataFim, novoValor, obs, kmRenovacao, numeroAditivoParam = null, semanaPagaParam = null) {
         return new Promise((resolve, reject) => {
             try {
                 const c = db.contratos.find(x => x.id === contratoId);
                 if (!c) return reject(new Error('Contrato não encontrado.'));
+                const ultAdt = getUltimoAditivo(c);
                 const cli = db.clientes.find(x => x.id === c.cliente_id) || {};
                 const vei = db.veiculos.find(x => x.id === c.veiculo_id) || {};
                 const loggedUser = getUser();
@@ -1322,7 +1451,25 @@ export function renderContratos(container) {
                 const dataAtual = new Date();
                 const dataAtualExtenso = dataAtual.toLocaleDateString('pt-BR', { dateStyle: 'long' });
                 const horaAtual = dataAtual.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                const numeroAditivo = (c.numero_aditivo || 0) + 1;
+                
+                const numeroAditivo = numeroAditivoParam !== null && numeroAditivoParam !== undefined
+                    ? Number(numeroAditivoParam)
+                    : (c.numero_aditivo ? Number(c.numero_aditivo) : (ultAdt ? Number(ultAdt.numero_aditivo) : 1));
+
+                const semanasPagas = semanaPagaParam !== null && semanaPagaParam !== undefined
+                    ? Number(semanaPagaParam)
+                    : (Number(c.semanas_pagas) || numeroAditivo);
+
+                const dataIniFinal = dataInicioRenovacao || (ultAdt ? ultAdt.data_inicio : c.data_inicio);
+                const dataFimFinal = novaDataFim || (ultAdt ? ultAdt.data_fim : (c.vencimento ? `${c.vencimento}T18:00:00` : c.data_fim));
+                const novoValorFinal = (novoValor !== null && novoValor !== undefined && !isNaN(novoValor)) 
+                    ? Number(novoValor) 
+                    : (ultAdt && ultAdt.valor ? Number(ultAdt.valor) : (c.tipo_plano === 'fidelidade' ? (Number(c.valor_semanal) || 350) : (c.tipo_plano === 'aquisicao' ? (Number(c.valor_semanal) || 375) : Number(c.valor))));
+                const kmRenovFinal = (kmRenovacao !== null && kmRenovacao !== undefined && !isNaN(kmRenovacao))
+                    ? Number(kmRenovacao)
+                    : (ultAdt && ultAdt.km_atual ? Number(ultAdt.km_atual) : (vei.km_atual || c.km_saida || 0));
+                const obsFinal = obs || (ultAdt ? ultAdt.observacoes : (c.observacoes || ''));
+
                 const isCarro = Boolean(
                     (vei.categoria && vei.categoria.toLowerCase().trim() === 'carro') ||
                     (vei.tipo && vei.tipo.toLowerCase().trim() === 'carro') ||
@@ -1348,9 +1495,8 @@ export function renderContratos(container) {
 
                 let html = '';
                 if (c.tipo_plano === 'fidelidade') {
-                    const valorSemanal = Number(c.valor_semanal) || (Number(c.valor) > 1000 ? Number(c.valor) / 12 : Number(c.valor)) || Number(novoValor) || 350;
+                    const valorSemanal = Number(c.valor_semanal) || (Number(c.valor) > 1000 ? Number(c.valor) / 12 : Number(c.valor)) || Number(novoValorFinal) || 350;
                     const valorIntegral = Number(c.valor_integral) || (Number(c.valor) > 1000 ? Number(c.valor) : valorSemanal * 12);
-                    const semanasPagas = Number(c.semanas_pagas) || numeroAditivo;
                     const totalPago = Math.min(valorIntegral, semanasPagas * valorSemanal);
                     const saldoRestante = Math.max(0, valorIntegral - totalPago);
                     const semanasRestantes = Math.max(0, 12 - semanasPagas);
@@ -1371,7 +1517,7 @@ export function renderContratos(container) {
 
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 4px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">CLÁUSULA 1ª – DO OBJETO E ABATIMENTO DA PARCELA SEMANAL</h3>
-                            <p style="margin:0;">1.1. O presente Termo Aditivo formaliza o pagamento e abatimento da <strong>${semanasPagas}ª (semana de número ${semanasPagas}) parcela semanal</strong>, no valor de <strong>${fmtMoeda(novoValor)}</strong>, referente ao plano de fidelidade de 3 (três) meses do(a) ${tipoVeiculoTexto} modelo <strong>${vei.modelo || '________'}</strong>, placa <strong>${vei.placa || '________'}</strong>, chassi <strong>${vei.chassi || '________'}</strong>.</p>
+                            <p style="margin:0;">1.1. O presente Termo Aditivo formaliza o pagamento e abatimento da <strong>${semanasPagas}ª (semana de número ${semanasPagas}) parcela semanal</strong>, no valor de <strong>${fmtMoeda(novoValorFinal)}</strong>, referente ao plano de fidelidade de 3 (três) meses do(a) ${tipoVeiculoTexto} modelo <strong>${vei.modelo || '________'}</strong>, placa <strong>${vei.placa || '________'}</strong>, chassi <strong>${vei.chassi || '________'}</strong>.</p>
                             <p style="margin:2px 0 0;">1.2. A LOCADORA confere ao LOCATÁRIO plena e irrevogável quitação exclusivamente em relação à referida semana quitada.</p>
                         </div>
 
@@ -1389,7 +1535,7 @@ export function renderContratos(container) {
                                     </tr>
                                     <tr style="border-top: 1px dashed #ddd;">
                                         <td style="padding: 2px; color: #047857;"><strong>Parcela Abatida neste Aditivo:</strong></td>
-                                        <td style="padding: 2px; text-align: right; font-weight: bold; color: #047857;">${semanasPagas}ª Parcela de 12 Semanas (${fmtMoeda(novoValor)})</td>
+                                        <td style="padding: 2px; text-align: right; font-weight: bold; color: #047857;">${semanasPagas}ª Parcela de 12 Semanas (${fmtMoeda(novoValorFinal)})</td>
                                     </tr>
                                     <tr>
                                         <td style="padding: 2px;"><strong>Total Já Pago / Abatido pelo Locatário:</strong></td>
@@ -1405,9 +1551,9 @@ export function renderContratos(container) {
 
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 4px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">CLÁUSULA 3ª – DO PERÍODO DA SEMANA RENOVADA E PRÓXIMO VENCIMENTO</h3>
-                            <p style="margin:0;">3.1. Em decorrência do pagamento e abatimento ora formalizado, fica renovada e assegurada a posse direta e o uso do veículo pelo período semanal compreendido entre <strong>${fmtDataHora(dataInicioRenovacao)}</strong> e <strong>${fmtDataHora(novaDataFim)}</strong>.</p>
-                            <p style="margin:2px 0 0;">3.2. A próxima parcela semanal no valor de <strong>${fmtMoeda(valorSemanal)}</strong> vencerá impreterivelmente em <strong>${fmtDataHora(novaDataFim)}</strong>.</p>
-                            <p style="margin:2px 0 0;">3.3. Registra-se que a quilometragem do veículo aferida no ato deste abatimento é de <strong>${Number(kmRenovacao || vei.km_atual || 0).toLocaleString('pt-BR')} KM</strong>.</p>
+                            <p style="margin:0;">3.1. Em decorrência do pagamento e abatimento ora formalizado, fica renovada e assegurada a posse direta e o uso do veículo pelo período semanal compreendido entre <strong>${fmtDataHora(dataIniFinal)}</strong> e <strong>${fmtDataHora(dataFimFinal)}</strong>.</p>
+                            <p style="margin:2px 0 0;">3.2. A próxima parcela semanal no valor de <strong>${fmtMoeda(valorSemanal)}</strong> vencerá impreterivelmente em <strong>${fmtDataHora(dataFimFinal)}</strong>.</p>
+                            <p style="margin:2px 0 0;">3.3. Registra-se que a quilometragem do veículo aferida no ato deste abatimento é de <strong>${Number(kmRenovFinal).toLocaleString('pt-BR')} KM</strong>.</p>
                         </div>
 
                         <div style="margin: 6px 0;">
@@ -1415,10 +1561,10 @@ export function renderContratos(container) {
                             <p style="margin:0;">Permanecem plenamente válidas, vigentes e inalteradas todas as demais cláusulas e condições estipuladas no Contrato Principal de Locação com Fidelidade ref. VM-${c.id.toString().slice(-5)}, em especial a fidelidade mínima de 3 meses sob pena de multa de R$ 2.000,00 por devolução antecipada, as vedações de sublocação, as obrigações de manutenção preventiva periódica, e a responsabilidade civil e criminal por infrações de trânsito ou sinistros.</p>
                         </div>
 
-                        ${obs ? `
+                        ${obsFinal ? `
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 2px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">OBSERVAÇÕES ADICIONAIS</h3>
-                            <p style="margin:0;">${obs}</p>
+                            <p style="margin:0;">${obsFinal}</p>
                         </div>
                         ` : ''}
 
@@ -1458,10 +1604,9 @@ export function renderContratos(container) {
                     </div>
                     `;
                 } else if (c.tipo_plano === 'aquisicao') {
-                    const valorSemanal = Number(c.valor_semanal) || Number(c.valor_parcela) || Number(novoValor) || 375;
+                    const valorSemanal = Number(c.valor_semanal) || Number(c.valor_parcela) || Number(novoValorFinal) || 375;
                     const valorEntrada = Number(c.valor_entrada) || 2000;
                     const valorIntegral = Number(c.valor_integral) || (valorEntrada + 104 * valorSemanal);
-                    const semanasPagas = Number(c.semanas_pagas) || numeroAditivo;
                     const totalPago = valorEntrada + Math.min(valorIntegral - valorEntrada, semanasPagas * valorSemanal);
                     const saldoRestante = Math.max(0, valorIntegral - totalPago);
                     const semanasRestantes = Math.max(0, 104 - semanasPagas);
@@ -1482,7 +1627,7 @@ export function renderContratos(container) {
 
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 4px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">CLÁUSULA 1ª – DO OBJETO E PAGAMENTO DA PARCELA SEMANAL</h3>
-                            <p style="margin:0;">1.1. O presente Termo Aditivo formaliza o pagamento e quitação da <strong>${semanasPagas}ª (semana de número ${semanasPagas} de 104) parcela semanal</strong>, no valor de <strong>${fmtMoeda(novoValor)}</strong>, referente ao plano de aquisição do(a) ${tipoVeiculoTexto} modelo <strong>${vei.modelo || '________'}</strong>, placa <strong>${vei.placa || '________'}</strong>, chassi <strong>${vei.chassi || '________'}</strong>.</p>
+                            <p style="margin:0;">1.1. O presente Termo Aditivo formaliza o pagamento e quitação da <strong>${semanasPagas}ª (semana de número ${semanasPagas} de 104) parcela semanal</strong>, no valor de <strong>${fmtMoeda(novoValorFinal)}</strong>, referente ao plano de aquisição do(a) ${tipoVeiculoTexto} modelo <strong>${vei.modelo || '________'}</strong>, placa <strong>${vei.placa || '________'}</strong>, chassi <strong>${vei.chassi || '________'}</strong>.</p>
                             <p style="margin:2px 0 0;">1.2. A LOCADORA confere ao LOCATÁRIO plena e irrevogável quitação exclusivamente em relação à referida semana quitada.</p>
                         </div>
 
@@ -1504,7 +1649,7 @@ export function renderContratos(container) {
                                     </tr>
                                     <tr style="border-top: 1px dashed #ddd;">
                                         <td style="padding: 2px; color: #047857;"><strong>Parcela Paga / Quitada neste Aditivo:</strong></td>
-                                        <td style="padding: 2px; text-align: right; font-weight: bold; color: #047857;">${semanasPagas}ª Parcela de 104 Semanas (${fmtMoeda(novoValor)})</td>
+                                        <td style="padding: 2px; text-align: right; font-weight: bold; color: #047857;">${semanasPagas}ª Parcela de 104 Semanas (${fmtMoeda(novoValorFinal)})</td>
                                     </tr>
                                     <tr>
                                         <td style="padding: 2px;"><strong>Total Já Amortizado pelo Locatário (Entrada + Parcelas):</strong></td>
@@ -1520,9 +1665,9 @@ export function renderContratos(container) {
 
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 4px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">CLÁUSULA 3ª – DO PERÍODO RENOVADO E PRÓXIMO VENCIMENTO</h3>
-                            <p style="margin:0;">3.1. Em decorrência do pagamento da presente parcela, fica renovada a posse e vigência semanal compreendida entre <strong>${fmtDataHora(dataInicioRenovacao)}</strong> e <strong>${fmtDataHora(novaDataFim)}</strong>.</p>
-                            <p style="margin:2px 0 0;">3.2. A próxima parcela semanal no valor de <strong>${fmtMoeda(valorSemanal)}</strong> vencerá impreterivelmente em <strong>${fmtDataHora(novaDataFim)}</strong>.</p>
-                            <p style="margin:2px 0 0;">3.3. Registra-se que a quilometragem do veículo aferida no ato deste pagamento é de <strong>${Number(kmRenovacao || vei.km_atual || 0).toLocaleString('pt-BR')} KM</strong>.</p>
+                            <p style="margin:0;">3.1. Em decorrência do pagamento da presente parcela, fica renovada a posse e vigência semanal compreendida entre <strong>${fmtDataHora(dataIniFinal)}</strong> e <strong>${fmtDataHora(dataFimFinal)}</strong>.</p>
+                            <p style="margin:2px 0 0;">3.2. A próxima parcela semanal no valor de <strong>${fmtMoeda(valorSemanal)}</strong> vencerá impreterivelmente em <strong>${fmtDataHora(dataFimFinal)}</strong>.</p>
+                            <p style="margin:2px 0 0;">3.3. Registra-se que a quilometragem do veículo aferida no ato deste pagamento é de <strong>${Number(kmRenovFinal).toLocaleString('pt-BR')} KM</strong>.</p>
                         </div>
 
                         <div style="margin: 6px 0;">
@@ -1530,10 +1675,10 @@ export function renderContratos(container) {
                             <p style="margin:0;">Ficam plenamente mantidas e ratificadas todas as cláusulas e condições estabelecidas no Contrato Principal ref. VM-${c.id.toString().slice(-5)}, incluindo a reserva de domínio em favor da LOCADORA até o adimplemento da 104ª parcela semanal, as normas de conservação e manutenção periódica em oficina credenciada, a indicação imediata de pontuação por multas e a perda imediata da opção de compra em caso de atraso superior a 15 dias.</p>
                         </div>
 
-                        ${obs ? `
+                        ${obsFinal ? `
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 2px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">OBSERVAÇÕES ADICIONAIS</h3>
-                            <p style="margin:0;">${obs}</p>
+                            <p style="margin:0;">${obsFinal}</p>
                         </div>
                         ` : ''}
 
@@ -1588,17 +1733,17 @@ export function renderContratos(container) {
 
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 4px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">CLÁUSULA 1ª – DO OBJETO DA RENOVAÇÃO</h3>
-                            <p style="margin:0;">O presente Termo Aditivo tem por finalidade prorrogar o período de locação do(a) ${tipoVeiculoTexto} modelo <strong>${vei.modelo || '________'}</strong>, placa <strong>${vei.placa || '________'}</strong>, chassi <strong>${vei.chassi || '________'}</strong>, com quilometragem registrada no ato desta renovação em <strong>${Number(kmRenovacao || vei.km_atual || 0).toLocaleString('pt-BR')} KM</strong>.</p>
+                            <p style="margin:0;">O presente Termo Aditivo tem por finalidade prorrogar o período de locação do(a) ${tipoVeiculoTexto} modelo <strong>${vei.modelo || '________'}</strong>, placa <strong>${vei.placa || '________'}</strong>, chassi <strong>${vei.chassi || '________'}</strong>, com quilometragem registrada no ato desta renovação em <strong>${Number(kmRenovFinal).toLocaleString('pt-BR')} KM</strong>.</p>
                         </div>
 
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 4px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">CLÁUSULA 2ª – DO NOVO PRAZO E VIGÊNCIA</h3>
-                            <p style="margin:0;">Fica ajustada a renovação da vigência contratual, iniciando-se em <strong>${fmtDataHora(dataInicioRenovacao)}</strong> e findando-se impreterivelmente em <strong>${fmtDataHora(novaDataFim)}</strong>.</p>
+                            <p style="margin:0;">Fica ajustada a renovação da vigência contratual, iniciando-se em <strong>${fmtDataHora(dataIniFinal)}</strong> e findando-se impreterivelmente em <strong>${fmtDataHora(dataFimFinal)}</strong>.</p>
                         </div>
 
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 4px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">CLÁUSULA 3ª – DOS NOVO VALORES</h3>
-                            <p style="margin:0;">O LOCATÁRIO pagará à LOCADORA o valor atualizado de <strong>${fmtMoeda(novoValor)}</strong> pela renovação, mantendo-se a forma de pagamento via PIX ajustada no contrato original.</p>
+                            <p style="margin:0;">O LOCATÁRIO pagará à LOCADORA o valor atualizado de <strong>${fmtMoeda(novoValorFinal)}</strong> pela renovação, mantendo-se a forma de pagamento via PIX ajustada no contrato original.</p>
                         </div>
 
                         <div style="margin: 6px 0;">
@@ -1606,10 +1751,10 @@ export function renderContratos(container) {
                             <p style="margin:0;">Ficam expressamente ratificadas e mantidas todas as demais cláusulas e condições do Contrato de Locação original, as quais permanecem em pleno vigor e validade, inclusive aquelas referentes às multas por quebra, juros moratórios, garantias de caução, proibição de sublocação, e responsabilidade civil e criminal em caso de sinistros, multas de trânsito ou apropriação indébita.</p>
                         </div>
 
-                        ${obs ? `
+                        ${obsFinal ? `
                         <div style="margin: 6px 0;">
                             <h3 style="font-size: 9px; font-weight: bold; margin: 0 0 2px; text-transform: uppercase; background: #e5e7eb; padding: 2px 4px;">OBSERVAÇÕES ADICIONAIS</h3>
-                            <p style="margin:0;">${obs}</p>
+                            <p style="margin:0;">${obsFinal}</p>
                         </div>
                         ` : ''}
 
@@ -1691,6 +1836,123 @@ export function renderContratos(container) {
                 reject(error);
             }
         });
+    }
+
+    // ===== REIMPRESSÃO DE TERMOS ADITIVOS =====
+    function fecharModalReimprimir() {
+        if (!modalReimprimir) return;
+        modalReimprimir.classList.add('opacity-0');
+        if (modalReimprimirPanel) modalReimprimirPanel.classList.add('scale-95');
+        setTimeout(() => {
+            modalReimprimir.classList.add('hidden');
+        }, 200);
+    }
+
+    if (btnFecharReimprimir) btnFecharReimprimir.addEventListener('click', fecharModalReimprimir);
+    if (btnCancelarReimprimir) btnCancelarReimprimir.addEventListener('click', fecharModalReimprimir);
+
+    async function reimprimirAditivoItem(c, adt) {
+        showLoading('Gerando 2ª via do Termo Aditivo...');
+        try {
+            const numAdt = adt ? adt.numero_aditivo : c.numero_aditivo;
+            const semPaga = adt ? adt.semanas_pagas : c.semanas_pagas;
+            const dtIni = adt ? adt.data_inicio : c.data_inicio;
+            const dtFim = adt ? adt.data_fim : (c.vencimento ? `${c.vencimento}T18:00:00` : c.data_fim);
+            const val = adt ? adt.valor : (c.tipo_plano === 'fidelidade' ? (c.valor_semanal || 350) : (c.tipo_plano === 'aquisicao' ? (c.valor_semanal || 375) : c.valor));
+            const km = adt ? adt.km_atual : (c.km_retorno || c.km_saida || 0);
+            const observ = adt ? adt.observacoes : '';
+
+            await gerarPDFAditivo(c.id, dtIni, dtFim, val, observ, km, numAdt, semPaga);
+        } catch (err) {
+            console.error('Erro ao reimprimir aditivo:', err);
+            await showAlert('Erro ao reimprimir aditivo: ' + err.message);
+        } finally {
+            hideLoading();
+        }
+    }
+
+    async function abrirReimpressaoAditivo(c) {
+        if (!c) return;
+        const aditivos = obterOuSintetizarAditivos(c);
+
+        if (!aditivos || aditivos.length === 0) {
+            await showAlert('Nenhum termo aditivo emitido para este contrato até o momento.');
+            return;
+        }
+
+        // Se houver apenas 1 aditivo, reimprime diretamente para máxima agilidade
+        if (aditivos.length === 1) {
+            await reimprimirAditivoItem(c, aditivos[0]);
+            return;
+        }
+
+        // Se houver mais de 1 aditivo, abre modal de seleção
+        const cli = db.clientes.find(x => x.id === c.cliente_id) || { nome: 'Cliente' };
+        const vei = db.veiculos.find(v => v.id === c.veiculo_id) || { modelo: 'Veículo', placa: '---' };
+
+        if (reimpInfoCliente) reimpInfoCliente.innerText = cli.nome || 'Cliente';
+        if (reimpInfoVeiculo) reimpInfoVeiculo.innerText = `${vei.modelo || 'Veículo'} (Placa: ${vei.placa || '---'})`;
+        if (reimpInfoContrato) reimpInfoContrato.innerText = `VM-${c.id.toString().slice(-5)} (${c.tipo_plano ? c.tipo_plano.toUpperCase() : 'SIMPLES'})`;
+
+        if (reimpListaAditivos) {
+            reimpListaAditivos.innerHTML = '';
+
+            // Ordena do mais recente ao mais antigo para facilitar ao usuário
+            const listaOrdenada = [...aditivos].sort((a, b) => (Number(b.numero_aditivo) || 0) - (Number(a.numero_aditivo) || 0));
+
+            listaOrdenada.forEach((adt, idx) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'bg-white border border-gray-200 p-3 hover:border-purple-300 transition flex items-center justify-between shadow-sm';
+                
+                let labelSemana = '';
+                if (c.tipo_plano === 'fidelidade') {
+                    labelSemana = `Semana ${adt.semanas_pagas || (adt.numero_aditivo + 1)} de 12`;
+                } else if (c.tipo_plano === 'aquisicao') {
+                    labelSemana = `Parcela ${adt.semanas_pagas || adt.numero_aditivo} de 104`;
+                } else {
+                    labelSemana = `Renovação #${adt.numero_aditivo}`;
+                }
+
+                const dtIniFmt = adt.data_inicio ? new Date(adt.data_inicio).toLocaleDateString('pt-BR') : '---';
+                const dtFimFmt = adt.data_fim ? new Date(adt.data_fim).toLocaleDateString('pt-BR') : '---';
+                const valFmt = Number(adt.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+                itemDiv.innerHTML = `
+                    <div class="space-y-0.5">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-gray-900 text-xs">Termo Aditivo nº ${adt.numero_aditivo}</span>
+                            <span class="text-[10px] bg-purple-100 text-purple-800 font-mono font-bold px-1.5 py-0.5 rounded">${labelSemana}</span>
+                            ${idx === 0 ? '<span class="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1 py-0.2 rounded uppercase">Mais Recente</span>' : ''}
+                        </div>
+                        <div class="text-[11px] text-gray-500">
+                            Período: <strong>${dtIniFmt}</strong> até <strong>${dtFimFmt}</strong>
+                            ${adt.km_atual ? ` | KM: <strong>${Number(adt.km_atual).toLocaleString('pt-BR')}</strong>` : ''}
+                        </div>
+                        <div class="text-[11px] text-emerald-700 font-mono font-bold">
+                            Valor: ${valFmt}
+                        </div>
+                    </div>
+                    <button type="button" class="btn-item-reimp bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white border border-purple-200 hover:border-purple-600 px-3 py-1.5 text-xs font-black uppercase tracking-wider rounded-sm flex items-center gap-1 shadow-sm transition">
+                        <i class="ph-bold ph-printer text-sm"></i> Reimprimir
+                    </button>
+                `;
+
+                itemDiv.querySelector('.btn-item-reimp').addEventListener('click', async () => {
+                    fecharModalReimprimir();
+                    await reimprimirAditivoItem(c, adt);
+                });
+
+                reimpListaAditivos.appendChild(itemDiv);
+            });
+        }
+
+        if (modalReimprimir) {
+            modalReimprimir.classList.remove('hidden');
+            setTimeout(() => {
+                modalReimprimir.classList.remove('opacity-0');
+                if (modalReimprimirPanel) modalReimprimirPanel.classList.remove('scale-95');
+            }, 10);
+        }
     }
 
     // ===== FUNÇÕES DE MODAL =====
@@ -1962,6 +2224,7 @@ export function renderContratos(container) {
 
         const btnPDF = e.target.closest('.btn-pdf');
         const btnAditivo = e.target.closest('.btn-aditivo');
+        const btnReimprimirAditivo = e.target.closest('.btn-reimprimir-aditivo');
         const btnEncerrar = e.target.closest('.btn-encerrar');
         const btnWpp = e.target.closest('.btn-wpp');
         const btnExcluirContrato = e.target.closest('.btn-excluir-contrato');
@@ -2212,6 +2475,15 @@ export function renderContratos(container) {
             }
         }
 
+        // REIMPRIMIR ADITIVO
+        if (btnReimprimirAditivo) {
+            const id = Number(btnReimprimirAditivo.getAttribute('data-id'));
+            const c = db.contratos.find(x => x.id === id);
+            if (!c) return;
+            await abrirReimpressaoAditivo(c);
+            return;
+        }
+
         // ENCERRAR (BAIXA / DEVOLUÇÃO)
         if (btnEncerrar) {
             const id = Number(btnEncerrar.getAttribute('data-id'));
@@ -2415,6 +2687,23 @@ export function renderContratos(container) {
                 contrato.data_proxima_manutencao = dataManut.toISOString().split('T')[0];
             }
 
+            const aditivoItem = {
+                id: Date.now(),
+                numero_aditivo: contrato.numero_aditivo,
+                semanas_pagas: contrato.semanas_pagas || contrato.numero_aditivo,
+                data_inicio: dataInicioRenovacao,
+                data_fim: novaDataFim,
+                valor: novoValor,
+                km_atual: kmAtualRenovacao,
+                observacoes: obs || '',
+                criado_em: new Date().toISOString()
+            };
+
+            const historico = getHistoricoAditivos(contrato);
+            historico.push(aditivoItem);
+            contrato.historico_aditivos = JSON.stringify(historico);
+            contrato.ultimo_aditivo = JSON.stringify(aditivoItem);
+
             await window.electronAPI.saveData('contratos', db.contratos);
             atualizarTabela();
 
@@ -2425,7 +2714,7 @@ export function renderContratos(container) {
             showLoading(isFidelidade ? 'Gerando Termo de Abatimento Semanal...' : 'Gerando PDF da renovação...');
             
             try {
-                await gerarPDFAditivo(contratoId, dataInicioRenovacao, novaDataFim, novoValor, obs, kmAtualRenovacao);
+                await gerarPDFAditivo(contratoId, dataInicioRenovacao, novaDataFim, novoValor, obs, kmAtualRenovacao, contrato.numero_aditivo, contrato.semanas_pagas);
                 hideLoading();
 
                 const cli = db.clientes.find(x => x.id === contrato.cliente_id);
