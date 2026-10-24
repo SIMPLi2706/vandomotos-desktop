@@ -1,0 +1,80 @@
+/* ========================================================
+   VANDO MOTOS - DESIGN SYSTEM CORE
+   Estética Corporativa, Quadrada e Fluída
+======================================================== */
+
+/* Scrollbar Profissional (Quadrada) */
+.custom-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 0px; /* Bordas retas */
+    transition: background 0.3s ease;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* Transições Fluidas Globais */
+* {
+    transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
+
+/* Animações de Entrada de Tela (Fluidez ao trocar de menu) */
+.fade-enter {
+    animation: slideFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Campos de Formulário mais severos e tecnológicos */
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    box-shadow: -3px 3px 0px 0px rgba(250, 204, 21, 0.3) !important; /* Efeito sombra quadrada moderna */
+    border-color: #facc15 !important;
+}
+
+/* Tiras de tabela fluidas */
+tr {
+    transition: background-color 0.2s ease;
+}
+
+/* ===== UTILITY CLASSES ===== */
+.btn-primary {
+    background-color: #0a0a0a;
+    color: #facc15;
+    font-weight: 700;
+    transition: all 0.15s ease;
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.9);
+    border: 1px solid #1a1a1a;
+}
+.btn-primary:hover {
+    background-color: #000000;
+}
+.btn-danger {
+    background-color: #dc2626;
+    color: #ffffff;
+    font-weight: 700;
+    transition: all 0.15s ease;
+    box-shadow: 4px 4px 0px 0px rgba(220, 38, 38, 0.3);
+    border: 1px solid #991b1b;
+}
+.btn-danger:hover {
+    background-color: #b91c1c;
+}

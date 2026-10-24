@@ -1,0 +1,74 @@
+{
+  "name": "vandomotos-desktop",
+  "version": "1.1.6",
+  "description": "Vando Motos ERP Enterprise - Sistema de Gestão de Locação e Vendas",
+  "main": "main.js",
+  "scripts": {
+    "start": "npx electron-rebuild -f -w better-sqlite3 && electron .",
+    "build:win": "electron-builder --win --x64 --ia32",
+    "publish:win": "node scripts/publish.js",
+    "pack": "electron-builder --dir"
+  },
+  "keywords": [
+    "vandomotos",
+    "erp",
+    "locacao",
+    "electron"
+  ],
+  "author": "Vando Motos",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^9.6.0",
+    "dotenv": "^16.4.7",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "22.3.27",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.vandomotos.erp",
+    "productName": "Vando Motos ERP",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "SIMPLi2706",
+        "repo": "vandomotos-desktop"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        }
+      ],
+      "icon": "src/assets/img/logo.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Vando Motos ERP"
+    }
+  }
+}

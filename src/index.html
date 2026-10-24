@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vando Motos | ERP Enterprise</title>
+    
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Vando Motos">
+    <link rel="apple-touch-icon" href="./assets/img/logo.png">
+
+    <link rel="stylesheet" href="./vendor/phosphor/regular/style.css">
+    <link rel="stylesheet" href="./vendor/phosphor/bold/style.css">
+    <link rel="stylesheet" href="./vendor/phosphor/fill/style.css">
+    <script src="./vendor/tailwind.js"></script>
+    
+    <!-- Bibliotecas locais offline -->
+    <script src="./vendor/chart.js"></script>
+    <script src="./vendor/html2pdf.bundle.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { 
+                        brand: { dark: '#0a0a0a', darker: '#000000', main: '#facc15', hover: '#eab308', light: '#fefce8' } 
+                    },
+                    borderRadius: { 'none': '0px', 'sm': '0px', DEFAULT: '2px', 'md': '2px', 'lg': '2px', 'xl': '2px', '2xl': '2px', '3xl': '2px', 'full': '9999px' },
+                    boxShadow: { 'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)', 'hard': '4px 4px 0px 0px rgba(0, 0, 0, 0.9)' }
+                }
+            }
+        }
+    </script>
+    
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body class="bg-gray-100 text-gray-900 h-screen flex overflow-hidden antialiased selection:bg-brand-main selection:text-black">
+
+    <!-- TELA DE LOGIN -->
+    <div id="login-screen" class="fixed inset-0 bg-brand-darker z-[100] flex flex-col items-center justify-center p-4 transition-opacity duration-500">
+        <div class="w-full max-w-md bg-brand-dark border border-gray-800 p-6 md:p-8 shadow-[0_0_50px_rgba(250,204,21,0.05)] relative overflow-hidden flex flex-col min-h-[420px]">
+            <div class="absolute top-0 left-0 w-full h-1 bg-brand-main"></div>
+            
+            <div class="flex justify-center mb-6">
+                <img src="./assets/img/logo.png" alt="Vando Motos" class="h-20 object-contain drop-shadow-lg">
+            </div>
+
+            <!-- ETAPA 1: SELECIONAR PERFIL -->
+            <div id="login-step-profiles" class="flex flex-col flex-1 transition-all duration-300">
+                <h2 class="text-white text-center text-xs font-bold uppercase tracking-widest mb-4 pb-2 border-b border-gray-900">Selecione o seu perfil</h2>
+                <div id="login-profiles-list" class="grid grid-cols-2 gap-3 mb-4">
+                    <!-- Gerado dinamicamente via JS -->
+                </div>
+                <button type="button" id="btn-login-outro" class="text-gray-400 hover:text-brand-main text-[10px] font-bold uppercase tracking-wider text-center py-2 transition-colors">
+                    Entrar com outro usuário <i class="ph-bold ph-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- ETAPA 2: INSERIR SENHA / LOGIN MANUAL -->
+            <div id="login-step-password" class="hidden flex flex-col flex-1 transition-all duration-300">
+                <button type="button" id="btn-voltar-perfis" class="self-start text-gray-400 hover:text-brand-main text-[10px] font-bold uppercase tracking-wider mb-4 transition-colors">
+                    <i class="ph-bold ph-arrow-left"></i> Voltar para Perfis
+                </button>
+                <div id="selected-user-container" class="flex items-center gap-3 bg-gray-900/50 p-3 border border-gray-800 mb-4 rounded">
+                    <div id="selected-user-avatar" class="w-8 h-8 rounded-full bg-brand-main text-black flex items-center justify-center font-black text-sm uppercase">U</div>
+                    <div>
+                        <h3 id="selected-user-name" class="text-white text-xs font-bold uppercase">Usuário</h3>
+                        <p id="selected-user-role" class="text-[9px] font-bold uppercase text-brand-main">Função</p>
+                    </div>
+                </div>
+                <form id="form-login" class="space-y-4">
+                    <div id="login-username-container" class="hidden">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Usuário</label>
+                        <input type="text" id="login-username" class="w-full px-4 py-3 bg-gray-900 border border-gray-700 text-white focus:border-brand-main outline-none transition-colors font-mono text-sm" placeholder="Ex: vando">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Senha</label>
+                        <input type="password" id="login-senha" required class="w-full px-4 py-3 bg-gray-900 border border-gray-700 text-white focus:border-brand-main outline-none transition-colors font-mono text-sm">
+                    </div>
+                    <div id="login-erro" class="hidden text-red-500 text-[11px] font-bold text-center bg-red-900/20 border border-red-900 p-2 uppercase tracking-wider"></div>
+                    <button type="submit" id="btn-login" class="w-full py-3 mt-2 bg-brand-main text-black font-black uppercase tracking-widest hover:bg-brand-hover transition-colors flex justify-center items-center gap-2 shadow-hard">
+                        <i class="ph-bold ph-lock-key text-lg"></i> Entrar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- OVERLAY MOBILE -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-brand-darker/80 backdrop-blur-sm z-30 hidden transition-opacity opacity-0 md:hidden"></div>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-40 w-64 bg-brand-darker flex flex-col shrink-0 text-white border-r border-gray-800 h-full shadow-2xl md:shadow-none">
+        <div class="py-8 px-6 flex items-center justify-center border-b border-gray-900 bg-brand-dark">
+            <img src="./assets/img/logo.png" alt="Vando Motos Logo" class="w-full h-auto object-contain drop-shadow-lg transform hover:scale-105 transition-transform duration-300">
+        </div>
+        <nav class="p-5 space-y-1.5 flex-1 overflow-y-auto custom-scroll" id="main-menu"></nav>
+        <div class="p-5 border-t border-gray-900 bg-brand-dark flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+                    <span class="text-gray-500 text-[10px] font-mono tracking-widest uppercase">Operacional</span>
+                </div>
+                <button id="btn-backup" class="text-gray-400 hover:text-emerald-400 transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest">
+                    <i class="ph-bold ph-floppy-disk text-base"></i> Backup
+                </button>
+                <button id="btn-logout" class="text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest">
+                    Sair <i class="ph-bold ph-sign-out text-base"></i>
+                </button>
+            </div>
+            <div class="text-[10px] text-gray-500 text-center border-t border-gray-800 pt-2" id="user-info"></div>
+        </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden bg-gray-50 relative w-full">
+        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-8 shrink-0 z-10 shadow-sm backdrop-blur-md bg-white/90">
+            <div class="flex items-center gap-3">
+                <button id="btn-menu-mobile" class="md:hidden text-brand-dark hover:text-brand-main focus:outline-none transition-colors">
+                    <i class="ph-bold ph-list text-2xl"></i>
+                </button>
+                <h2 id="page-title" class="text-base md:text-lg font-extrabold text-gray-900 uppercase tracking-tight truncate max-w-[180px] md:max-w-none">Verificando...</h2>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden sm:block">
+                    <p class="text-sm font-bold text-gray-800 leading-none" id="user-role-label">Carregando...</p>
+                    <span class="text-[10px] text-gray-500 font-black uppercase tracking-widest" id="current-date"></span>
+                </div>
+            </div>
+        </header>
+        <div class="flex-1 overflow-auto p-4 md:p-10 relative custom-scroll" id="app-content"></div>
+        <div class="hidden flex-1 p-0 relative h-full flex-col" id="whatsapp-persistent-container">
+            <div class="w-full h-full flex flex-col relative overflow-hidden">
+                <webview id="whatsapp-webview" partition="persist:whatsapp" style="width:100%; height:100%; flex: 1;" useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"></webview>
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+</body>
+</html>
