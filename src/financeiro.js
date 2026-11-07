@@ -3,6 +3,7 @@ import { showAlert, showConfirm } from './modal.js';
 import { showLoading, hideLoading } from './loading.js';
 import { getUser } from './session.js';
 import { exportCSV } from './csvUtils.js';
+import { sincronizarFinanceiroComContratos } from './financeiroSync.js';
 
 export function renderFinanceiro(container, exportCSV) {
     container.innerHTML = `
@@ -613,7 +614,7 @@ export function renderFinanceiro(container, exportCSV) {
         document.body.removeChild(link);
     });
 
-    atualizarTela();
+    sincronizarFinanceiroComContratos().then(() => atualizarTela()).catch(() => atualizarTela());
 
     async function salvarPDFNoDisco(pdfBlob, nomeArquivo) {
         try {

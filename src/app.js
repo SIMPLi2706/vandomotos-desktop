@@ -9,6 +9,8 @@ import { renderUsuarios } from './usuarios.js';
 import { setUser, getUser, clearUser } from './session.js';
 import { showAlert, showConfirm } from './modal.js';
 import { showLoading, hideLoading } from './loading.js';
+import { sincronizarFinanceiroComContratos } from './financeiroSync.js';
+import './pdfViewer.js';
 
 // Elementos
 const loginScreen = document.getElementById('login-screen');
@@ -219,6 +221,7 @@ async function iniciarSistema() {
         showLoading('A carregar dados...');
         const data = await window.electronAPI.loadData();
         Object.assign(db, data);
+        await sincronizarFinanceiroComContratos();
         hideLoading();
 
         console.log('✅ Dados carregados:', { clientes: db.clientes.length, veiculos: db.veiculos.length });

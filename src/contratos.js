@@ -4,6 +4,7 @@ import { showLoading, hideLoading } from './loading.js';
 import { getUser } from './session.js';
 import { exportCSV } from './csvUtils.js';
 import { showPrompt } from './promptModal.js';
+import { abrirVisualizadorPDF, salvarPDFNoDisco, imprimirPDFDireto } from './pdfViewer.js';
 
 export function renderContratos(container) {
     if (!db.espera) db.espera = [];
@@ -2146,17 +2147,32 @@ export function renderContratos(container) {
                         valor: valorSemanal,
                         contrato_id: novoContrato.id
                     });
-                }
-                if (isAquisicao && Number(inputValorEntrada.value) > 0) {
-                    db.financeiro.push({
-                        id: Date.now() + 2,
-                        data: new Date().toISOString().split('T')[0],
-                        tipo: 'entrada',
-                        categoria: 'Entrada Aquisição',
-                        descricao: `Entrada (Contrato de Aquisição) - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiculoObj ? veiculoObj.placa : '---'})`,
-                        valor: Number(inputValorEntrada.value),
-                        contrato_id: novoContrato.id
-                    });
+                } else if (isAquisicao) {
+                    if (Number(inputValorEntrada.value) > 0) {
+                        db.financeiro.push({
+                            id: Date.now() + 2,
+                            data: new Date().toISOString().split('T')[0],
+                            tipo: 'entrada',
+                            categoria: 'Entrada Aquisição',
+                            descricao: `Entrada (Contrato de Aquisição) - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiculoObj ? veiculoObj.placa : '---'})`,
+                            valor: Number(inputValorEntrada.value),
+                            contrato_id: novoContrato.id
+                        });
+                    }
+                } else {
+                    // Contrato Simples (receita inicial integral da locação)
+                    const valorInicialSimples = Number(inputValor.value) || Number(novoContrato.valor) || 0;
+                    if (valorInicialSimples > 0) {
+                        db.financeiro.push({
+                            id: Date.now(),
+                            data: new Date().toISOString().split('T')[0],
+                            tipo: 'entrada',
+                            categoria: 'Locação Semanal',
+                            descricao: `Locação Semanal - Contrato VM-${novoContrato.id.toString().slice(-5)} - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiculoObj ? veiculoObj.placa : '---'})`,
+                            valor: valorInicialSimples,
+                            contrato_id: novoContrato.id
+                        });
+                    }
                 }
                 if (caucao > 0 && caucaoTipo !== 'penhora') {
                     db.financeiro.push({
@@ -2671,6 +2687,21 @@ export function renderContratos(container) {
                 contrato.data_fim = novaDataFim;
                 contrato.valor = novoValor;
                 contrato.numero_aditivo = (contrato.numero_aditivo || 0) + 1;
+
+                if (db.financeiro) {
+                    const cliTarget = db.clientes.find(cl => cl.id === contrato.cliente_id);
+                    const veiTarget = db.veiculos.find(ve => ve.id === contrato.veiculo_id);
+                    db.financeiro.push({
+                        id: Date.now(),
+                        data: new Date().toISOString().split('T')[0],
+                        tipo: 'entrada',
+                        categoria: 'Locação Semanal',
+                        descricao: `Renovação de Locação (${contrato.numero_aditivo}º Aditivo) - Contrato VM-${contrato.id.toString().slice(-5)} - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiTarget ? veiTarget.placa : '---'})`,
+                        valor: novoValor,
+                        contrato_id: contrato.id
+                    });
+                    await window.electronAPI.saveData('financeiro', db.financeiro);
+                }
             }
 
             if (kmAtualRenovacao !== null && !isNaN(kmAtualRenovacao) && kmAtualRenovacao >= 0) {
