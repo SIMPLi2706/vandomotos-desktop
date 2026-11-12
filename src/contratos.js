@@ -5,6 +5,7 @@ import { getUser } from './session.js';
 import { exportCSV } from './csvUtils.js';
 import { showPrompt } from './promptModal.js';
 import { abrirVisualizadorPDF, salvarPDFNoDisco, imprimirPDFDireto } from './pdfViewer.js';
+import { formatLocalYMD } from './financeiroSync.js';
 
 export function renderContratos(container) {
     if (!db.espera) db.espera = [];
@@ -2135,12 +2136,13 @@ export function renderContratos(container) {
                 await window.electronAPI.saveData('espera', db.espera);
             }
 
-            // Registrar entrada financeira correspondente à 1ª semana / entrada / caução se houver
+            // Registrar entrada financeira correspondente apenas à venda/locação (sem caução ou penhora)
             if (db.financeiro) {
+                const dataHojeLocal = formatLocalYMD(new Date());
                 if (isFidelidade) {
                     db.financeiro.push({
                         id: Date.now(),
-                        data: new Date().toISOString().split('T')[0],
+                        data: dataHojeLocal,
                         tipo: 'entrada',
                         categoria: 'Locação Semanal',
                         descricao: `1ª Parcela Semanal (1/12) - Contrato Fidelidade 3M - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiculoObj ? veiculoObj.placa : '---'})`,
@@ -2151,7 +2153,7 @@ export function renderContratos(container) {
                     if (Number(inputValorEntrada.value) > 0) {
                         db.financeiro.push({
                             id: Date.now() + 2,
-                            data: new Date().toISOString().split('T')[0],
+                            data: dataHojeLocal,
                             tipo: 'entrada',
                             categoria: 'Entrada Aquisição',
                             descricao: `Entrada (Contrato de Aquisição) - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiculoObj ? veiculoObj.placa : '---'})`,
@@ -2165,7 +2167,7 @@ export function renderContratos(container) {
                     if (valorInicialSimples > 0) {
                         db.financeiro.push({
                             id: Date.now(),
-                            data: new Date().toISOString().split('T')[0],
+                            data: dataHojeLocal,
                             tipo: 'entrada',
                             categoria: 'Locação Semanal',
                             descricao: `Locação Semanal - Contrato VM-${novoContrato.id.toString().slice(-5)} - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiculoObj ? veiculoObj.placa : '---'})`,
@@ -2173,17 +2175,6 @@ export function renderContratos(container) {
                             contrato_id: novoContrato.id
                         });
                     }
-                }
-                if (caucao > 0 && caucaoTipo !== 'penhora') {
-                    db.financeiro.push({
-                        id: Date.now() + 1,
-                        data: new Date().toISOString().split('T')[0],
-                        tipo: 'entrada',
-                        categoria: 'Caução',
-                        descricao: `Caução de Locação - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiculoObj ? veiculoObj.placa : '---'})`,
-                        valor: caucao,
-                        contrato_id: novoContrato.id
-                    });
                 }
                 await window.electronAPI.saveData('financeiro', db.financeiro);
             }
@@ -2645,6 +2636,7 @@ export function renderContratos(container) {
 
             const isFidelidade = contrato.tipo_plano === 'fidelidade';
             const isAquisicao = contrato.tipo_plano === 'aquisicao';
+            const dataAditivoLocal = formatLocalYMD(new Date());
             if (isFidelidade) {
                 contrato.semanas_pagas = Math.min(12, (contrato.semanas_pagas || 1) + 1);
                 contrato.numero_aditivo = (contrato.numero_aditivo || 0) + 1;
@@ -2655,7 +2647,7 @@ export function renderContratos(container) {
                     const veiTarget = db.veiculos.find(ve => ve.id === contrato.veiculo_id);
                     db.financeiro.push({
                         id: Date.now(),
-                        data: new Date().toISOString().split('T')[0],
+                        data: dataAditivoLocal,
                         tipo: 'entrada',
                         categoria: 'Locação Semanal',
                         descricao: `Abatimento Semanal (${contrato.semanas_pagas}ª semana de 12) - Contrato Fidelidade VM-${contrato.id.toString().slice(-5)} - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiTarget ? veiTarget.placa : '---'})`,
@@ -2674,7 +2666,7 @@ export function renderContratos(container) {
                     const veiTarget = db.veiculos.find(ve => ve.id === contrato.veiculo_id);
                     db.financeiro.push({
                         id: Date.now(),
-                        data: new Date().toISOString().split('T')[0],
+                        data: dataAditivoLocal,
                         tipo: 'entrada',
                         categoria: 'Parcela Aquisição',
                         descricao: `Parcela Aquisição (${contrato.semanas_pagas}ª semana de 104) - Contrato VM-${contrato.id.toString().slice(-5)} - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiTarget ? veiTarget.placa : '---'})`,
@@ -2693,7 +2685,7 @@ export function renderContratos(container) {
                     const veiTarget = db.veiculos.find(ve => ve.id === contrato.veiculo_id);
                     db.financeiro.push({
                         id: Date.now(),
-                        data: new Date().toISOString().split('T')[0],
+                        data: dataAditivoLocal,
                         tipo: 'entrada',
                         categoria: 'Locação Semanal',
                         descricao: `Renovação de Locação (${contrato.numero_aditivo}º Aditivo) - Contrato VM-${contrato.id.toString().slice(-5)} - ${cliTarget ? cliTarget.nome.split(' ')[0] : 'Cliente'} (${veiTarget ? veiTarget.placa : '---'})`,

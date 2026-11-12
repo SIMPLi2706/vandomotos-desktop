@@ -3,7 +3,7 @@ import { showAlert, showConfirm } from './modal.js';
 import { showLoading, hideLoading } from './loading.js';
 import { getUser } from './session.js';
 import { exportCSV } from './csvUtils.js';
-import { sincronizarFinanceiroComContratos } from './financeiroSync.js';
+import { sincronizarFinanceiroComContratos, isRegistroNaoVenda, formatLocalYMD } from './financeiroSync.js';
 import { abrirVisualizadorPDF, salvarPDFNoDisco, imprimirPDFDireto } from './pdfViewer.js';
 
 let chartLucro = null;
@@ -13,14 +13,6 @@ let chartClientes = null;
 
 // Armazena o estado atual apurado para geração de PDF e impressão
 let dadosRelatorioAtual = null;
-
-function formatYMD(d) {
-    if (!d || isNaN(d.getTime())) return '';
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
 
 export function renderRelatorios(container) {
     container.innerHTML = `
@@ -32,7 +24,7 @@ export function renderRelatorios(container) {
                         <i class="ph-bold ph-chart-line-up text-brand-hover text-2xl"></i> Relatórios Gerenciais & Financeiros
                     </h2>
                     <p class="text-xs text-gray-500 mt-1">
-                        Auditoria de receitas, despesas, rentabilidade real por veículo e balanço patrimonial da frota.
+                        Apuração exclusiva de vendas e locações, despesas operacionais e rentabilidade real por veículo (sem cauções ou penhoras).
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
@@ -101,7 +93,6 @@ export function renderRelatorios(container) {
                             <option value="Locação Semanal">Locação Semanal</option>
                             <option value="Entrada Aquisição">Entrada Aquisição</option>
                             <option value="Parcela Aquisição">Parcela Aquisição</option>
-                            <option value="Caução">Caução</option>
                             <option value="Manutenção de Frota">Manutenção de Frota (Oficina)</option>
                             <option value="Impostos e Taxas">Impostos e Taxas</option>
                             <option value="Infraestrutura">Infraestrutura</option>
@@ -121,11 +112,11 @@ export function renderRelatorios(container) {
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div class="bg-white p-5 border border-emerald-200 border-l-4 border-l-emerald-500 shadow-soft">
                     <p class="text-[10px] font-bold text-emerald-800 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                        <i class="ph-bold ph-trend-up text-base text-emerald-600"></i> Faturamento Bruto (Entradas)
+                        <i class="ph-bold ph-trend-up text-base text-emerald-600"></i> Faturamento em Vendas (Entradas)
                     </p>
                     <h3 class="text-2xl md:text-3xl font-black text-emerald-700 font-mono" id="kpi-entradas">R$ 0,00</h3>
                     <div class="text-[11px] text-gray-500 mt-2 font-medium" id="kpi-entradas-sub">
-                        Locações: R$ 0,00 | Cauções: R$ 0,00
+                        Locações: R$ 0,00 | Aquisições/Vendas: R$ 0,00
                     </div>
                 </div>
 
@@ -228,9 +219,7 @@ export function renderRelatorios(container) {
                                 <th class="p-3 text-center">Tipo</th>
                                 <th class="p-3 text-center">Status</th>
                                 <th class="p-3 text-center">Contratos</th>
-                                <th class="p-3 text-right text-blue-700">Receita Locação</th>
-                                <th class="p-3 text-right text-gray-600">Caução</th>
-                                <th class="p-3 text-right text-emerald-700 font-bold">Total Receita</th>
+                                <th class="p-3 text-right text-emerald-700 font-bold">Faturamento (Vendas)</th>
                                 <th class="p-3 text-right text-red-600 font-bold">Oficina / Peças</th>
                                 <th class="p-3 text-right font-black">Lucro Líquido Real</th>
                                 <th class="p-3 text-right">Margem</th>
@@ -289,10 +278,10 @@ export function renderRelatorios(container) {
         </div>
     `;
 
-    // Função central de carregamento e apuração do relatório
+    // Função central de carregamento e apuração do relatório (exclusivamente vendas/locações e despesas, sem cauções/penhoras)
     function carregarRelatorios(inicio, fim, tipo, categoria) {
-        // Reconciliação em memória garantida
-        let lancamentos = db.financeiro || [];
+        // Filtra apenas lançamentos reais de vendas/locações e despesas (exclui cauções, penhoras e garantias)
+        let lancamentos = (db.financeiro || []).filter(f => !isRegistroNaoVenda(f));
 
         // Filtro de data seguro (sem problemas de fuso horário UTC)
         let filtrados = lancamentos.filter(f => {
@@ -308,7 +297,7 @@ export function renderRelatorios(container) {
         // Ordenar do mais recente para o mais antigo
         filtrados.sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0) || b.id - a.id);
 
-        // Separação de entradas e saídas
+        // Separação de entradas (vendas/locações) e saídas (despesas)
         const entradas = filtrados.filter(f => f.tipo === 'entrada');
         const saidas = filtrados.filter(f => f.tipo === 'saida');
 
@@ -317,9 +306,9 @@ export function renderRelatorios(container) {
         const lucro = totalEntradas - totalSaidas;
         const margemPct = totalEntradas > 0 ? ((lucro / totalEntradas) * 100).toFixed(1) : '0.0';
 
-        // Detalhamento de Entradas (Locação vs Caução)
-        const totalLocacoes = entradas.filter(f => f.categoria !== 'Caução').reduce((acc, f) => acc + (Number(f.valor) || 0), 0);
-        const totalCaucoes = entradas.filter(f => f.categoria === 'Caução').reduce((acc, f) => acc + (Number(f.valor) || 0), 0);
+        // Detalhamento de Entradas (Locações vs Aquisições/Vendas avulsas)
+        const totalLocacoes = entradas.filter(f => f.categoria === 'Locação Semanal').reduce((acc, f) => acc + (Number(f.valor) || 0), 0);
+        const totalOutrasVendas = totalEntradas - totalLocacoes;
 
         // Detalhamento de Saídas (Oficina vs Outras)
         const totalOficina = saidas.filter(f => f.categoria === 'Manutenção de Frota').reduce((acc, f) => acc + (Number(f.valor) || 0), 0);
@@ -327,7 +316,7 @@ export function renderRelatorios(container) {
 
         // Atualização dos Cards de KPIs
         document.getElementById('kpi-entradas').innerText = utils.formatMoney(totalEntradas);
-        document.getElementById('kpi-entradas-sub').innerText = `Locações: ${utils.formatMoney(totalLocacoes)} | Cauções: ${utils.formatMoney(totalCaucoes)}`;
+        document.getElementById('kpi-entradas-sub').innerText = `Locações: ${utils.formatMoney(totalLocacoes)} | Aquisições/Vendas: ${utils.formatMoney(totalOutrasVendas)}`;
 
         document.getElementById('kpi-saidas').innerText = utils.formatMoney(totalSaidas);
         document.getElementById('kpi-saidas-sub').innerText = `Oficina: ${utils.formatMoney(totalOficina)} | Outras: ${utils.formatMoney(totalOutrasDespesas)}`;
@@ -423,8 +412,6 @@ export function renderRelatorios(container) {
         const tfRent = document.getElementById('tf-rentabilidade-veiculos');
         const listaRentabilidade = [];
 
-        let somaTotalLocacao = 0;
-        let somaTotalCaucao = 0;
         let somaTotalReceita = 0;
         let somaTotalManutencao = 0;
         let somaTotalLucroReal = 0;
@@ -437,15 +424,13 @@ export function renderRelatorios(container) {
                 const contratosDoV = (db.contratos || []).filter(c => c.veiculo_id === v.id);
                 const idsContratos = contratosDoV.map(c => c.id);
 
-                // Filtrar entradas associadas a este veículo no período
+                // Filtrar entradas de vendas/locações associadas a este veículo no período
                 const entradasDoV = entradas.filter(f => 
                     (f.contrato_id && idsContratos.includes(f.contrato_id)) ||
                     (f.descricao && f.descricao.toLowerCase().includes(v.placa.toLowerCase()))
                 );
 
-                const recLocacao = entradasDoV.filter(f => f.categoria !== 'Caução').reduce((acc, f) => acc + Number(f.valor || 0), 0);
-                const recCaucao = entradasDoV.filter(f => f.categoria === 'Caução').reduce((acc, f) => acc + Number(f.valor || 0), 0);
-                const recTotal = recLocacao + recCaucao;
+                const recTotal = entradasDoV.reduce((acc, f) => acc + Number(f.valor || 0), 0);
 
                 // Filtrar despesas de manutenção associadas a este veículo no período
                 const saidasDoV = saidas.filter(f => 
@@ -470,17 +455,13 @@ export function renderRelatorios(container) {
                     placa: v.placa,
                     categoria: v.categoria || 'moto',
                     status: v.status || 'disponivel',
-                    qtdContratos: qtdContratosPeriodo || contratosDoV.length,
-                    recLocacao,
-                    recCaucao,
+                    qtdContratos: (inicio || fim) ? qtdContratosPeriodo : contratosDoV.length,
                     recTotal,
                     gastoOficina,
                     lucroReal,
                     margemVeic
                 });
 
-                somaTotalLocacao += recLocacao;
-                somaTotalCaucao += recCaucao;
                 somaTotalReceita += recTotal;
                 somaTotalManutencao += gastoOficina;
                 somaTotalLucroReal += lucroReal;
@@ -493,7 +474,7 @@ export function renderRelatorios(container) {
             if (tagTotalV) tagTotalV.innerText = `${listaRentabilidade.length} veículos apurados`;
 
             if (listaRentabilidade.length === 0) {
-                tbRent.innerHTML = '<tr><td colspan="10" class="p-6 text-center text-gray-400 font-sans">Nenhum veículo registrado na frota.</td></tr>';
+                tbRent.innerHTML = '<tr><td colspan="8" class="p-6 text-center text-gray-400 font-sans">Nenhum veículo registrado na frota.</td></tr>';
             } else {
                 listaRentabilidade.forEach(item => {
                     const tr = document.createElement('tr');
@@ -520,8 +501,6 @@ export function renderRelatorios(container) {
                         <td class="p-3 text-center">${badgeTipo}</td>
                         <td class="p-3 text-center">${statusTag}</td>
                         <td class="p-3 text-center text-gray-700 font-bold">${item.qtdContratos}</td>
-                        <td class="p-3 text-right text-blue-800">${utils.formatMoney(item.recLocacao)}</td>
-                        <td class="p-3 text-right text-gray-600">${utils.formatMoney(item.recCaucao)}</td>
                         <td class="p-3 text-right text-emerald-700 font-bold">${utils.formatMoney(item.recTotal)}</td>
                         <td class="p-3 text-right text-red-600 font-bold">${utils.formatMoney(item.gastoOficina)}</td>
                         <td class="p-3 text-right ${lucroClass}">${utils.formatMoney(item.lucroReal)}</td>
@@ -534,8 +513,6 @@ export function renderRelatorios(container) {
                 tfRent.innerHTML = `
                     <tr class="text-xs">
                         <td colspan="4" class="p-3 uppercase tracking-wider font-black text-gray-900">TOTAL GERAL APURADO:</td>
-                        <td class="p-3 text-right text-blue-900 font-black">${utils.formatMoney(somaTotalLocacao)}</td>
-                        <td class="p-3 text-right text-gray-700 font-black">${utils.formatMoney(somaTotalCaucao)}</td>
                         <td class="p-3 text-right text-emerald-800 font-black">${utils.formatMoney(somaTotalReceita)}</td>
                         <td class="p-3 text-right text-red-700 font-black">${utils.formatMoney(somaTotalManutencao)}</td>
                         <td class="p-3 text-right ${somaTotalLucroReal >= 0 ? 'text-emerald-800' : 'text-red-700'} font-black text-sm">${utils.formatMoney(somaTotalLucroReal)}</td>
@@ -553,7 +530,7 @@ export function renderRelatorios(container) {
             data: {
                 labels: topRentaveis.map(v => `${v.modelo.split(' ')[0]} (${v.placa})`),
                 datasets: [{
-                    label: 'Faturamento Bruto',
+                    label: 'Faturamento em Vendas',
                     data: topRentaveis.map(v => v.recTotal),
                     backgroundColor: '#3b82f6',
                     borderRadius: 3
@@ -575,7 +552,16 @@ export function renderRelatorios(container) {
         // 5. Gráfico Top Clientes por Faturamento
         const clienteFat = {};
         entradas.forEach(f => {
-            const cli = (db.clientes || []).find(c => (f.contrato_id && (db.contratos || []).some(x => x.id === f.contrato_id && x.cliente_id === c.id)) || (f.descricao && f.descricao.toLowerCase().includes(c.nome.toLowerCase().split(' ')[0])));
+            let cli = null;
+            if (f.contrato_id) {
+                const ctr = (db.contratos || []).find(x => x.id === f.contrato_id);
+                if (ctr) {
+                    cli = (db.clientes || []).find(c => c.id === ctr.cliente_id);
+                }
+            }
+            if (!cli && f.descricao) {
+                cli = (db.clientes || []).find(c => f.descricao.toLowerCase().includes((c.nome || '').toLowerCase().split(' ')[0]));
+            }
             const nomeCli = cli ? cli.nome.split(' ')[0] : 'Avulso';
             clienteFat[nomeCli] = (clienteFat[nomeCli] || 0) + Number(f.valor || 0);
         });
@@ -622,12 +608,10 @@ export function renderRelatorios(container) {
             lucro,
             margemPct,
             totalLocacoes,
-            totalCaucoes,
+            totalOutrasVendas,
             totalOficina,
             totalOutrasDespesas,
             listaRentabilidade,
-            somaTotalLocacao,
-            somaTotalCaucao,
             somaTotalReceita,
             somaTotalManutencao,
             somaTotalLucroReal,
@@ -731,34 +715,30 @@ export function renderRelatorios(container) {
     // Pílulas de período rápido
     document.querySelectorAll('.btn-pilula-periodo').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.btn-pilula-periodo').forEach(b => {
-                b.className = "btn-pilula-periodo px-2.5 py-1 text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-sm transition shadow-xs";
-            });
-            btn.className = "btn-pilula-periodo px-2.5 py-1 text-xs font-bold bg-brand-main text-brand-dark border border-brand-dark rounded-sm transition shadow-xs";
-
             const tipo = btn.getAttribute('data-tipo');
+            marcarPilulaAtiva(tipo);
             const hoje = new Date();
             let ini = '';
-            let fim = formatYMD(hoje);
+            let fim = formatLocalYMD(hoje);
 
             if (tipo === 'todos') {
                 ini = '';
                 fim = '';
             } else if (tipo === 'este-mes') {
-                ini = formatYMD(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+                ini = formatLocalYMD(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
             } else if (tipo === 'mes-anterior') {
                 const primeiroDiaMesAnt = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
                 const ultimoDiaMesAnt = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-                ini = formatYMD(primeiroDiaMesAnt);
-                fim = formatYMD(ultimoDiaMesAnt);
+                ini = formatLocalYMD(primeiroDiaMesAnt);
+                fim = formatLocalYMD(ultimoDiaMesAnt);
             } else if (tipo === 'ultimos-30') {
                 const trintaDias = new Date(hoje);
                 trintaDias.setDate(trintaDias.getDate() - 30);
-                ini = formatYMD(trintaDias);
+                ini = formatLocalYMD(trintaDias);
             } else if (tipo === 'este-ano') {
-                ini = formatYMD(new Date(hoje.getFullYear(), 0, 1));
+                ini = formatLocalYMD(new Date(hoje.getFullYear(), 0, 1));
             } else if (tipo === 'hoje') {
-                ini = formatYMD(hoje);
+                ini = formatLocalYMD(hoje);
             }
 
             document.getElementById('rel-inicio').value = ini;
@@ -847,8 +827,6 @@ export function renderRelatorios(container) {
                     <td style="padding: 4px 6px; text-align: center;">${catStr}</td>
                     <td style="padding: 4px 6px; text-align: center;">${statusStr}</td>
                     <td style="padding: 4px 6px; text-align: center;">${item.qtdContratos}</td>
-                    <td style="padding: 4px 6px; text-align: right; font-family: monospace;">${fmtMoeda(item.recLocacao)}</td>
-                    <td style="padding: 4px 6px; text-align: right; font-family: monospace;">${fmtMoeda(item.recCaucao)}</td>
                     <td style="padding: 4px 6px; text-align: right; font-family: monospace; font-weight: bold; color: #047857;">${fmtMoeda(item.recTotal)}</td>
                     <td style="padding: 4px 6px; text-align: right; font-family: monospace; color: #b91c1c;">${fmtMoeda(item.gastoOficina)}</td>
                     <td style="padding: 4px 6px; text-align: right; font-family: monospace; font-weight: bold;">${fmtMoeda(item.lucroReal)}</td>
@@ -906,14 +884,14 @@ export function renderRelatorios(container) {
                 <!-- QUADRO RESUMO EXECUTIVO (KPIS) -->
                 <div style="margin-bottom: 14px;">
                     <h3 style="font-size: 9.5px; font-weight: bold; text-transform: uppercase; background: #e5e7eb; padding: 3px 6px; margin: 0 0 4px; border-left: 3px solid #000;">
-                        1. DEMONSTRATIVO DE RESULTADOS CONSOLIDADO (DRE)
+                        1. DEMONSTRATIVO DE RESULTADOS CONSOLIDADO (DRE — VENDAS E LOCAÇÕES)
                     </h3>
                     <table style="width: 100%; border-collapse: collapse; font-size: 9px; border: 1px solid #ccc; background: #fafafa;">
                         <tr>
                             <td style="padding: 6px; border: 1px solid #e5e7eb; width: 25%;">
-                                <span style="font-size: 8px; color: #555; text-transform: uppercase; display: block;">Total de Receitas (Entradas):</span>
+                                <span style="font-size: 8px; color: #555; text-transform: uppercase; display: block;">Faturamento em Vendas:</span>
                                 <strong style="font-size: 12px; color: #047857; font-family: monospace;">${fmtMoeda(dados.totalEntradas)}</strong>
-                                <span style="font-size: 7.5px; color: #666; display: block; margin-top: 2px;">Locação: ${fmtMoeda(dados.totalLocacoes)} | Caução: ${fmtMoeda(dados.totalCaucoes)}</span>
+                                <span style="font-size: 7.5px; color: #666; display: block; margin-top: 2px;">Locações: ${fmtMoeda(dados.totalLocacoes)} | Aquisições/Vendas: ${fmtMoeda(dados.totalOutrasVendas)}</span>
                             </td>
                             <td style="padding: 6px; border: 1px solid #e5e7eb; width: 25%;">
                                 <span style="font-size: 8px; color: #555; text-transform: uppercase; display: block;">Total de Despesas (Saídas):</span>
@@ -965,8 +943,6 @@ export function renderRelatorios(container) {
                                 <th style="padding: 4px 6px; text-align: center;">Tipo</th>
                                 <th style="padding: 4px 6px; text-align: center;">Status</th>
                                 <th style="padding: 4px 6px; text-align: center;">Contratos</th>
-                                <th style="padding: 4px 6px; text-align: right;">Locações</th>
-                                <th style="padding: 4px 6px; text-align: right;">Caução</th>
                                 <th style="padding: 4px 6px; text-align: right;">Faturamento</th>
                                 <th style="padding: 4px 6px; text-align: right;">Oficina/Peças</th>
                                 <th style="padding: 4px 6px; text-align: right;">Lucro Real</th>
@@ -979,8 +955,6 @@ export function renderRelatorios(container) {
                         <tfoot style="background: #e5e7eb; font-weight: bold;">
                             <tr>
                                 <td colspan="4" style="padding: 4px 6px; text-transform: uppercase;">TOTAL GERAL:</td>
-                                <td style="padding: 4px 6px; text-align: right; font-family: monospace;">${fmtMoeda(dados.somaTotalLocacao)}</td>
-                                <td style="padding: 4px 6px; text-align: right; font-family: monospace;">${fmtMoeda(dados.somaTotalCaucao)}</td>
                                 <td style="padding: 4px 6px; text-align: right; font-family: monospace; color: #047857;">${fmtMoeda(dados.somaTotalReceita)}</td>
                                 <td style="padding: 4px 6px; text-align: right; font-family: monospace; color: #b91c1c;">${fmtMoeda(dados.somaTotalManutencao)}</td>
                                 <td style="padding: 4px 6px; text-align: right; font-family: monospace;">${fmtMoeda(dados.somaTotalLucroReal)}</td>
@@ -1101,27 +1075,38 @@ export function renderRelatorios(container) {
         processarPDFRelatorio(true);
     });
 
+    function marcarPilulaAtiva(tipoAlvo) {
+        document.querySelectorAll('.btn-pilula-periodo').forEach(b => {
+            const ativo = b.getAttribute('data-tipo') === tipoAlvo;
+            b.className = ativo
+                ? "btn-pilula-periodo px-2.5 py-1 text-xs font-bold bg-brand-main text-brand-dark border border-brand-dark rounded-sm transition shadow-xs"
+                : "btn-pilula-periodo px-2.5 py-1 text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-sm transition shadow-xs";
+        });
+    }
+
     // Inicialização segura: executa reconciliação de dados ao abrir e carrega o período adequado
     sincronizarFinanceiroComContratos().then(() => {
-        // Se houver lançamentos no mês atual, usa o mês atual; caso contrário, abre com "Todo o Histórico"
         const hoje = new Date();
-        const inicioMesAtual = formatYMD(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
-        const hojeFormatado = formatYMD(hoje);
+        const inicioMesAtual = formatLocalYMD(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+        const hojeFormatado = formatLocalYMD(hoje);
 
-        const temMovimentosNoMes = (db.financeiro || []).some(f => f.data && f.data.slice(0, 10) >= inicioMesAtual);
+        const temMovimentosNoMes = (db.financeiro || []).some(f => !isRegistroNaoVenda(f) && f.data && f.data.slice(0, 10) >= inicioMesAtual);
 
         if (temMovimentosNoMes) {
+            marcarPilulaAtiva('este-mes');
             document.getElementById('rel-inicio').value = inicioMesAtual;
             document.getElementById('rel-fim').value = hojeFormatado;
             carregarRelatorios(inicioMesAtual, hojeFormatado, 'todos', 'todas');
         } else {
             // Abre com todo o histórico para que Seu Vando nunca veja zeros ao abrir o sistema
+            marcarPilulaAtiva('todos');
             document.getElementById('rel-inicio').value = '';
             document.getElementById('rel-fim').value = '';
             carregarRelatorios('', '', 'todos', 'todas');
         }
     }).catch(err => {
         console.error('Erro na inicialização de relatórios:', err);
+        marcarPilulaAtiva('todos');
         carregarRelatorios('', '', 'todos', 'todas');
     });
 }

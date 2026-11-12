@@ -1,6 +1,6 @@
 {
   "name": "vandomotos-desktop",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "Vando Motos ERP Enterprise - Sistema de Gestão de Locação e Vendas",
   "main": "main.js",
   "scripts": {

@@ -9,7 +9,7 @@ import { renderUsuarios } from './usuarios.js';
 import { setUser, getUser, clearUser } from './session.js';
 import { showAlert, showConfirm } from './modal.js';
 import { showLoading, hideLoading } from './loading.js';
-import { sincronizarFinanceiroComContratos } from './financeiroSync.js';
+import { sincronizarFinanceiroComContratos, isRegistroNaoVenda } from './financeiroSync.js';
 import './pdfViewer.js';
 
 // Elementos
@@ -340,8 +340,8 @@ function renderView(viewId) {
         const totalMotos = db.veiculos.filter(v => v.categoria !== 'carro').length;
         const totalCarros = db.veiculos.filter(v => v.categoria === 'carro').length;
         const locacoesAtivas = db.contratos.filter(c => c.status === 'ativo').length;
-        const receitaTotal = db.financeiro.filter(f => f.tipo === 'entrada').reduce((acc, curr) => acc + Number(curr.valor), 0);
-        const despesaTotal = db.financeiro.filter(f => f.tipo === 'saida').reduce((acc, curr) => acc + Number(curr.valor), 0);
+        const receitaTotal = db.financeiro.filter(f => f.tipo === 'entrada' && !isRegistroNaoVenda(f)).reduce((acc, curr) => acc + Number(curr.valor), 0);
+        const despesaTotal = db.financeiro.filter(f => f.tipo === 'saida' && !isRegistroNaoVenda(f)).reduce((acc, curr) => acc + Number(curr.valor), 0);
         const veiculosOficina = db.veiculos.filter(v => v.status === 'manutencao').length;
         const veiculosLivres = totalVeiculos - locacoesAtivas - veiculosOficina;
 

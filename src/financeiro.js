@@ -3,7 +3,7 @@ import { showAlert, showConfirm } from './modal.js';
 import { showLoading, hideLoading } from './loading.js';
 import { getUser } from './session.js';
 import { exportCSV } from './csvUtils.js';
-import { sincronizarFinanceiroComContratos } from './financeiroSync.js';
+import { sincronizarFinanceiroComContratos, formatLocalYMD } from './financeiroSync.js';
 
 export function renderFinanceiro(container, exportCSV) {
     container.innerHTML = `
@@ -467,7 +467,7 @@ export function renderFinanceiro(container, exportCSV) {
             }
             db.financeiro.push({
                 id: Date.now(),
-                data: new Date().toISOString().split('T')[0],
+                data: formatLocalYMD(new Date()),
                 tipo: 'entrada',
                 categoria: c.tipo_plano === 'aquisicao' ? 'Parcela Aquisição' : 'Locação Semanal',
                 descricao: desc,
